@@ -49,7 +49,6 @@ export const CYCLE_SHEETS = [
 ] as const;
 
 /** Colunas relevantes (ver Seção 3 da especificação técnica). Linha 2 = cabeçalho, dados a partir da linha 3. */
-const RANGE_COLUMNS = "B:S";
 const DATA_START_ROW = 3;
 
 export interface RawLeadRow {
@@ -102,7 +101,7 @@ export async function fetchUnitSheet(
   const auth = getAuth();
   const sheets = google.sheets({ version: "v4", auth });
 
-  const range = `'${sheetName}'!${RANGE_COLUMNS}${DATA_START_ROW}:${RANGE_COLUMNS.split(":")[1]}`;
+  const range = `'${sheetName}'!B${DATA_START_ROW}:S`;
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
