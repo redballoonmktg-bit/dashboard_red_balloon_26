@@ -116,8 +116,8 @@ export async function GET(request: Request) {
     const monthlyEvolution = Array.from(monthly.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, v]) => {
-        const [, m] = key.split("-");
-        const date = new Date(2000, Number(m) - 1, 1);
+        const [y, m] = key.split("-");
+        const date = new Date(Number(y), Number(m) - 1, 1);
         return {
           key,
           label: monthLabel(date),
