@@ -21,6 +21,7 @@ export interface DashboardData {
     foraDoPerfilPct: number;
   };
   temperature: Record<string, number>;
+  temperatureByUnit: Record<string, Record<string, number>>;
   channels: Array<{ canal: string; leads: number; matriculas: number; online: boolean }>;
   onlineVsOutras: { onlineLeads: number; outrasLeads: number };
   monthlyEvolution: Array<{

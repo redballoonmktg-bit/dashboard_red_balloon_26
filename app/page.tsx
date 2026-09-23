@@ -42,7 +42,7 @@ export default function VisaoGeralPage() {
             <Kpi
               label="Conversão Geral"
               value={`${data.aggregate.conversaoGeralPct.toFixed(1)}%`}
-              hint="Matrícula ÷ Leads válidos"
+              hint="Matrícula ÷ Total de leads"
             />
             <Kpi
               label="Fora do Perfil"
@@ -111,7 +111,7 @@ export default function VisaoGeralPage() {
                   Conversão por Unidade
                 </div>
                 <div style={{ fontSize: 12, color: textMuted(0.55) }}>
-                  Matrículas ÷ leads válidos, no ciclo atual
+                  Matrículas ÷ total de leads, no período selecionado
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

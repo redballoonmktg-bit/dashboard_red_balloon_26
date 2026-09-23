@@ -52,31 +52,38 @@ export default function FunilPorUnidadePage() {
                     <span style={{ fontSize: 11, color: textMuted(0.55) }}>{u.totalLeads} leads</span>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                     {FUNNEL_STAGES.map((stage, i) => {
                       const value = u.funnel[stage] || 0;
-                      const pct = Math.max(0.08, value / stage0);
-                      const opacity = [1, 0.82, 0.68, 0.54, 0.4, 0.26][i];
+                      const pct = Math.max(0.06, value / stage0);
                       return (
-                        <div key={stage} style={{ display: "flex", justifyContent: "center" }}>
+                        <div key={stage} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div
                             style={{
-                              width: `${pct * 100}%`,
-                              minWidth: 40,
-                              height: 30,
-                              background: unitColor[u.id],
-                              opacity,
-                              borderRadius: 6,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "#3737b4",
-                              fontSize: i < 4 ? 11 : 10,
-                              fontWeight: 800,
-                              whiteSpace: "nowrap"
+                              width: 78,
+                              flexShrink: 0,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: textMuted(0.65),
+                              textAlign: "right",
+                              lineHeight: 1.2
                             }}
                           >
-                            {i < 4 ? `${stage} · ${value}` : value}
+                            {stage}
+                          </div>
+                          <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+                            <div
+                              style={{
+                                width: `${pct * 100}%`,
+                                minWidth: 6,
+                                height: 20,
+                                background: unitColor[u.id],
+                                borderRadius: 4
+                              }}
+                            />
+                          </div>
+                          <div style={{ width: 28, flexShrink: 0, fontSize: 12, fontWeight: 800, color: "#3737b4" }}>
+                            {value}
                           </div>
                         </div>
                       );

@@ -9,8 +9,7 @@ const TABS = [
   { href: "/", label: "Visão Geral" },
   { href: "/ciclos", label: "Ciclos e Perfil" },
   { href: "/funil", label: "Funil por Unidade" },
-  { href: "/canais", label: "Canais de Origem" },
-  { href: "/evolucao", label: "Evolução Mensal" }
+  { href: "/canais", label: "Canais de Origem" }
 ];
 
 export function Header({ title, subtitle }: { title: string; subtitle: string }) {

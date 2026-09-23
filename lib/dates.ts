@@ -15,23 +15,28 @@ export const MONTH_LABELS_PT = [
 
 /**
  * Interpreta uma data vinda do Google Sheets (dateTimeRenderOption
- * FORMATTED_STRING) — normalmente "dd/mm/aaaa", mas aceitamos também
- * "aaaa-mm-dd" como fallback.
+ * FORMATTED_STRING).
  *
- * Datas fora de um intervalo plausível (2020–2035) são tratadas como
- * inválidas — evita que um erro de digitação na planilha (ex.: um número
- * gigante que o Sheets interpreta como data de outro século) vire um "mês
- * fantasma" no filtro de Evolução Mensal.
+ * IMPORTANTE: a planilha real usa formato mês/dia/ano (ex.: "9/21/2026" =
+ * 21 de setembro), não dia/mês/ano — confirmado direto na tela do Sheets.
+ * Também aceitamos "aaaa-mm-dd" como fallback, sem essa ambiguidade.
+ *
+ * Datas fora de um intervalo plausível (2020–2035), ou com mês/dia fora do
+ * intervalo válido, são tratadas como inválidas — evita que um erro de
+ * digitação na planilha vire um "mês fantasma" no filtro de Evolução Mensal.
  */
 export function parseBrDate(value: string): Date | null {
   const v = value.trim();
   if (!v) return null;
 
-  const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-  if (br) {
-    const [, d, m, y] = br;
+  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (us) {
+    const [, mo, d, y] = us;
+    const month = Number(mo);
+    const day = Number(d);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     const year = y.length === 2 ? Number(`20${y}`) : Number(y);
-    const date = new Date(year, Number(m) - 1, Number(d));
+    const date = new Date(year, month - 1, day);
     return isPlausible(date) ? date : null;
   }
 

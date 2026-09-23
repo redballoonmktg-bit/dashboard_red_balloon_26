@@ -53,7 +53,7 @@ export async function GET(request: Request) {
         totalLeads: rows.length,
         totalValidos: validos.length,
         matriculas: funnel.Matrícula,
-        conversaoPct: pct(funnel.Matrícula, validos.length),
+        conversaoPct: pct(funnel.Matrícula, rows.length),
         funnel,
         gargaloPct: computeGargalo(rows)
       };
@@ -67,19 +67,36 @@ export async function GET(request: Request) {
     const aggregate = {
       totalLeads: currentRows.length,
       matriculas: matriculasGeral,
-      conversaoGeralPct: pct(matriculasGeral, validosGeral.length),
+      conversaoGeralPct: pct(matriculasGeral, currentRows.length),
       foraDoPerfilPct: pct(foraPerfilGeral, currentRows.length)
     };
 
-    // ---------- Temperatura ----------
-    const temperature = { Quente: 0, Morno: 0, Frio: 0, "Fora do Perfil": 0 } as Record<
-      string,
-      number
-    >;
+    // ---------- Temperatura (geral + por unidade) ----------
+    const TEMP_LABELS = ["Quente", "Morno", "Frio", "Fora do Perfil"] as const;
+    function emptyTempBucket(): Record<string, number> {
+      return { Quente: 0, Morno: 0, Frio: 0, "Fora do Perfil": 0 };
+    }
+    // Mapa normalizado (minúsculo, sem espaço nas pontas) -> rótulo canônico.
+    // A planilha real tem algumas linhas com "morno" em minúsculo, por
+    // exemplo — sem essa normalização, essas linhas ficavam de fora da
+    // contagem (conferido contra a aba CONSOLIDADO).
+    const TEMP_NORM: Record<string, (typeof TEMP_LABELS)[number]> = {};
+    for (const label of TEMP_LABELS) TEMP_NORM[label.toLowerCase()] = label;
+
+    const temperature = emptyTempBucket();
+    const temperatureByUnit: Record<string, Record<string, number>> = {
+      am: emptyTempBucket(),
+      li: emptyTempBucket(),
+      pi: emptyTempBucket(),
+      ta: emptyTempBucket()
+    };
     for (const row of currentRows) {
-      const t = row.temperatura.trim();
-      if (t === "Quente" || t === "Morno" || t === "Frio" || t === "Fora do Perfil") {
-        temperature[t] += 1;
+      const canonical = TEMP_NORM[row.temperatura.trim().toLowerCase()];
+      if (canonical) {
+        temperature[canonical] += 1;
+        if (temperatureByUnit[row.unidadeId]) {
+          temperatureByUnit[row.unidadeId][canonical] += 1;
+        }
       }
     }
 
@@ -128,11 +145,12 @@ export async function GET(request: Request) {
       });
 
     // ---------- Ciclos (Alta 25-26, Alta 26-27, Baixa 2026, Baixa 2027) ----------
+    // Usa sempre o total completo de cada ciclo (allRows), nunca os dados já
+    // filtrados por mês — senão a barra de "Baixa 2026" ficaria menor que as
+    // outras só porque um mês específico está selecionado no filtro.
     const cycles = await Promise.all(
       CYCLE_SHEETS.map(async (c) => {
-        // O ciclo atual já foi lido acima; reaproveita para não duplicar chamadas.
-        const rows =
-          c.id === "baixa-2026" ? currentRows : await fetchAllUnitsForCycle(c.sheetSuffix);
+        const rows = c.id === "baixa-2026" ? allRows : await fetchAllUnitsForCycle(c.sheetSuffix);
         const funnel = computeFunnelCounts(rows);
         return {
           id: c.id,
@@ -148,6 +166,7 @@ export async function GET(request: Request) {
       units,
       aggregate,
       temperature,
+      temperatureByUnit,
       channels,
       onlineVsOutras: { onlineLeads, outrasLeads },
       monthlyEvolution,
