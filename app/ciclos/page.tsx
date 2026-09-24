@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 import { PageShell, LoadingState, ErrorState } from "@/components/PageShell";
 import { MonthFilter } from "@/components/MonthFilter";
 import { CycleFilter } from "@/components/CycleFilter";
@@ -30,6 +29,71 @@ const TEMP_COLORS: Record<string, string> = {
   "Fora do Perfil": brand.rosa
 };
 
+/**
+ * Gráfico de barras por ciclo, feito só com divs (sem lib de gráfico) —
+ * mais simples e não depende de medição de layout assíncrona, que em
+ * alguns navegadores fazia o gráfico de barras não aparecer.
+ */
+function CyclesBarChart({ cycles }: { cycles: Array<{ id: string; label: string; leads: number; matriculas: number }> }) {
+  const maxLeads = Math.max(...cycles.map((c) => c.leads), 1);
+  const maxHeight = 200;
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", height: maxHeight + 40, padding: "0 8px" }}>
+      {cycles.map((c) => {
+        const color = CYCLE_COLORS[c.id] ?? brand.azulEscuro;
+        const leadsH = Math.max(2, Math.round((c.leads / maxLeads) * maxHeight));
+        const matH = Math.max(2, Math.round((c.matriculas / maxLeads) * maxHeight));
+        return (
+          <div key={c.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: maxHeight }}>
+              <div
+                title={`Leads: ${c.leads.toLocaleString("pt-BR")}`}
+                style={{ width: 34, height: leadsH, background: color, opacity: 0.3, borderRadius: "6px 6px 0 0" }}
+              />
+              <div
+                title={`Matrículas: ${c.matriculas.toLocaleString("pt-BR")}`}
+                style={{ width: 34, height: matH, background: color, borderRadius: "6px 6px 0 0" }}
+              />
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, textAlign: "center" }}>{c.label}</div>
+            <div style={{ fontSize: 11, color: textMuted(0.55) }}>
+              {c.leads.toLocaleString("pt-BR")} · {c.matriculas.toLocaleString("pt-BR")}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Converte um ângulo (a partir do topo, sentido horário) em ponto x,y num raio r ao redor do centro cx,cy. */
+function polarPoint(cx: number, cy: number, r: number, angleDeg: number) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+/** Caminho SVG de uma fatia de rosquinha (donut), do ângulo start ao end, entre raio interno e externo. */
+function donutSlicePath(cx: number, cy: number, outerR: number, innerR: number, startDeg: number, endDeg: number) {
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  const p1 = polarPoint(cx, cy, outerR, startDeg);
+  const p2 = polarPoint(cx, cy, outerR, endDeg);
+  const p3 = polarPoint(cx, cy, innerR, endDeg);
+  const p4 = polarPoint(cx, cy, innerR, startDeg);
+  return [
+    `M ${p1.x} ${p1.y}`,
+    `A ${outerR} ${outerR} 0 ${largeArc} 1 ${p2.x} ${p2.y}`,
+    `L ${p3.x} ${p3.y}`,
+    `A ${innerR} ${innerR} 0 ${largeArc} 0 ${p4.x} ${p4.y}`,
+    "Z"
+  ].join(" ");
+}
+
+/**
+ * Rosquinha de temperatura em SVG de verdade (não CSS gradient) — cada
+ * fatia é um <path> com um <title>, que o navegador mostra como tooltip
+ * nativo ao passar o mouse, com a quantidade de leads daquela temperatura.
+ */
 function TempDonut({
   title,
   dotColor,
@@ -42,17 +106,19 @@ function TempDonut({
   size?: number;
 }) {
   const total = Object.values(temp).reduce((a, b) => a + b, 0) || 1;
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR = size / 2;
+  const innerR = size * 0.31;
+
   let acc = 0;
-  const gradientStops = Object.entries(temp)
-    .map(([k, v]) => {
-      const start = (acc / total) * 360;
-      acc += v;
-      const end = (acc / total) * 360;
-      return `${TEMP_COLORS[k] ?? "#ccc"} ${start}deg ${end}deg`;
-    })
-    .join(", ");
-  const inner = Math.round(size * 0.62);
-  const offset = Math.round((size - inner) / 2);
+  const slices = Object.entries(temp).map(([k, v]) => {
+    const start = (acc / total) * 360;
+    acc += v;
+    const end = (acc / total) * 360;
+    const pct = total > 0 ? ((v / total) * 100).toFixed(0) : "0";
+    return { key: k, start, end, value: v, pct, color: TEMP_COLORS[k] ?? "#ccc" };
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
@@ -61,20 +127,30 @@ function TempDonut({
         {title}
       </div>
       <div style={{ position: "relative", width: size, height: size }}>
-        <div style={{ width: size, height: size, borderRadius: 999, background: `conic-gradient(${gradientStops})` }} />
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {slices.map(
+            (s) =>
+              s.value > 0 && (
+                <path key={s.key} d={donutSlicePath(cx, cy, outerR, innerR, s.start, s.end)} fill={s.color}>
+                  <title>
+                    {s.key}: {s.value.toLocaleString("pt-BR")} leads ({s.pct}%)
+                  </title>
+                </path>
+              )
+          )}
+        </svg>
         <div
           style={{
             position: "absolute",
-            top: offset,
-            left: offset,
-            width: inner,
-            height: inner,
-            borderRadius: 999,
-            background: "#FFFFFF",
+            top: 0,
+            left: 0,
+            width: size,
+            height: size,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            justifyContent: "center"
+            justifyContent: "center",
+            pointerEvents: "none"
           }}
         >
           <div className="font-display" style={{ fontSize: 15, fontWeight: 800 }}>
@@ -105,54 +181,17 @@ export default function CiclosPage() {
               padding: 24,
               display: "flex",
               flexDirection: "column",
-              gap: 12,
-              minHeight: 320
+              gap: 12
             }}
           >
             <div className="font-display" style={{ fontSize: 15, fontWeight: 700 }}>
               Leads e Matrículas por Ciclo Comercial
             </div>
             <div style={{ fontSize: 12, color: textMuted(0.55) }}>
-              Comparação entre os 4 ciclos da planilha — não é afetada pelo filtro de mês abaixo.
+              Barra clara = leads · barra cheia = matrículas. Comparação entre os 4 ciclos da planilha — não é
+              afetada pelos filtros abaixo.
             </div>
-            <div style={{ flex: 1, minHeight: 220 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.cycles}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#3737b4" }} axisLine={false} tickLine={false} />
-                  <YAxis hide />
-                  <Tooltip />
-                  <Bar dataKey="leads" name="Leads" radius={[6, 6, 0, 0]}>
-                    {data.cycles.map((c) => (
-                      <Cell key={c.id} fill={CYCLE_COLORS[c.id] ?? brand.azulEscuro} fillOpacity={0.3} />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="matriculas" name="Matrículas" radius={[6, 6, 0, 0]}>
-                    {data.cycles.map((c) => (
-                      <Cell key={c.id} fill={CYCLE_COLORS[c.id] ?? brand.azulEscuro} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", paddingTop: 4 }}>
-              {data.cycles.map((c) => (
-                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                  <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: 999,
-                      background: CYCLE_COLORS[c.id] ?? brand.azulEscuro,
-                      display: "inline-block"
-                    }}
-                  />
-                  <span style={{ fontWeight: 800 }}>{c.label}:</span>
-                  <span style={{ color: textMuted(0.6) }}>
-                    {c.leads.toLocaleString("pt-BR")} leads · {c.matriculas.toLocaleString("pt-BR")} matrículas
-                  </span>
-                </div>
-              ))}
-            </div>
+            <CyclesBarChart cycles={data.cycles} />
           </div>
 
           <div
@@ -170,7 +209,9 @@ export default function CiclosPage() {
               <div className="font-display" style={{ fontSize: 15, fontWeight: 700 }}>
                 Distribuição de Temperatura por Unidade
               </div>
-              <div style={{ fontSize: 12, color: textMuted(0.55) }}>{CYCLE_LABELS[cycle]}</div>
+              <div style={{ fontSize: 12, color: textMuted(0.55) }}>
+                {CYCLE_LABELS[cycle]} · passe o mouse sobre as fatias pra ver a quantidade de leads
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
