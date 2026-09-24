@@ -3,29 +3,34 @@
 import { useState } from "react";
 import { PageShell, LoadingState, ErrorState } from "@/components/PageShell";
 import { MonthFilter } from "@/components/MonthFilter";
+import { CycleFilter } from "@/components/CycleFilter";
 import { useDashboardData } from "@/components/useDashboardData";
 import { unitColor, unitLabel, textMuted } from "@/lib/theme";
 import { FUNNEL_STAGES } from "@/lib/businessRules";
 
 export default function FunilPorUnidadePage() {
+  const [cycle, setCycle] = useState("all");
   const [month, setMonth] = useState("all");
-  const { data, error, loading, reload } = useDashboardData(month);
+  const { data, error, loading, reload } = useDashboardData(cycle, month);
 
   const worstUnitId = data
     ? data.units.reduce((worst, u) => (u.gargaloPct > worst.gargaloPct ? u : worst), data.units[0]).id
     : null;
 
   return (
-    <PageShell title="Funil por Unidade" subtitle="Ciclo Baixa 2026 · funil comercial por unidade">
+    <PageShell title="Funil por Unidade" subtitle="Funil comercial por unidade">
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={reload} />}
       {data && (
         <>
-          <MonthFilter
-            availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
-            value={month}
-            onChange={setMonth}
-          />
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <CycleFilter value={cycle} onChange={setCycle} />
+            <MonthFilter
+              availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
+              value={month}
+              onChange={setMonth}
+            />
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
             {data.units.map((u) => {

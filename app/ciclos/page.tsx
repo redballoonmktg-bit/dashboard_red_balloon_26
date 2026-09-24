@@ -4,8 +4,17 @@ import { useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from "recharts";
 import { PageShell, LoadingState, ErrorState } from "@/components/PageShell";
 import { MonthFilter } from "@/components/MonthFilter";
+import { CycleFilter } from "@/components/CycleFilter";
 import { useDashboardData } from "@/components/useDashboardData";
 import { brand, unitColor, unitLabel, textMuted } from "@/lib/theme";
+
+const CYCLE_LABELS: Record<string, string> = {
+  all: "Todos os ciclos",
+  "alta-25-26": "Alta 25-26",
+  "baixa-2026": "Baixa 2026",
+  "alta-26-27": "Alta 26-27",
+  "baixa-2027": "Baixa 2027"
+};
 
 const CYCLE_COLORS: Record<string, string> = {
   "alta-25-26": brand.verde,
@@ -78,8 +87,9 @@ function TempDonut({
 }
 
 export default function CiclosPage() {
+  const [cycle, setCycle] = useState("all");
   const [month, setMonth] = useState("all");
-  const { data, error, loading, reload } = useDashboardData(month);
+  const { data, error, loading, reload } = useDashboardData(cycle, month);
 
   return (
     <PageShell title="Ciclos e Perfil" subtitle="Leads 4 Escolas · comparação entre ciclos comerciais">
@@ -124,6 +134,25 @@ export default function CiclosPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", paddingTop: 4 }}>
+              {data.cycles.map((c) => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 999,
+                      background: CYCLE_COLORS[c.id] ?? brand.azulEscuro,
+                      display: "inline-block"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800 }}>{c.label}:</span>
+                  <span style={{ color: textMuted(0.6) }}>
+                    {c.leads.toLocaleString("pt-BR")} leads · {c.matriculas.toLocaleString("pt-BR")} matrículas
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div
@@ -141,14 +170,17 @@ export default function CiclosPage() {
               <div className="font-display" style={{ fontSize: 15, fontWeight: 700 }}>
                 Distribuição de Temperatura por Unidade
               </div>
-              <div style={{ fontSize: 12, color: textMuted(0.55) }}>Ciclo Baixa 2026</div>
+              <div style={{ fontSize: 12, color: textMuted(0.55) }}>{CYCLE_LABELS[cycle]}</div>
             </div>
 
-            <MonthFilter
-              availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
-              value={month}
-              onChange={setMonth}
-            />
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+              <CycleFilter value={cycle} onChange={setCycle} />
+              <MonthFilter
+                availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
+                value={month}
+                onChange={setMonth}
+              />
+            </div>
 
             <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap", paddingTop: 4 }}>
               <TempDonut title="Geral" dotColor={brand.azulEscuro} temp={data.temperature} size={128} />

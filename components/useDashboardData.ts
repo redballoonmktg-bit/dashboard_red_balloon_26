@@ -24,6 +24,13 @@ export interface DashboardData {
   temperatureByUnit: Record<string, Record<string, number>>;
   channels: Array<{ canal: string; leads: number; matriculas: number; online: boolean }>;
   onlineVsOutras: { onlineLeads: number; outrasLeads: number };
+  channelsByUnit: Record<
+    string,
+    {
+      channels: Array<{ canal: string; leads: number; matriculas: number; online: boolean }>;
+      onlineVsOutras: { onlineLeads: number; outrasLeads: number };
+    }
+  >;
   monthlyEvolution: Array<{
     key: string;
     label: string;
@@ -36,14 +43,15 @@ export interface DashboardData {
 
 const REFRESH_SECONDS = Number(process.env.NEXT_PUBLIC_REFRESH_INTERVAL_SECONDS ?? "45");
 
-export function useDashboardData(month: string = "all") {
+export function useDashboardData(cycle: string = "all", month: string = "all") {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard?month=${encodeURIComponent(month)}`, {
+      const params = new URLSearchParams({ cycle, month });
+      const res = await fetch(`/api/dashboard?${params.toString()}`, {
         cache: "no-store"
       });
       const json = await res.json();
@@ -55,14 +63,14 @@ export function useDashboardData(month: string = "all") {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [cycle, month]);
 
   useEffect(() => {
     setLoading(true);
     load();
-    // Busca de novo sempre que a página é aberta / o mês muda (acima) e,
-    // opcionalmente, a cada 30–60s enquanto a tela estiver aberta
-    // (requisito funcional).
+    // Busca de novo sempre que a página é aberta / o ciclo ou mês mudam
+    // (acima) e, opcionalmente, a cada 30–60s enquanto a tela estiver
+    // aberta (requisito funcional).
     const interval = setInterval(load, REFRESH_SECONDS * 1000);
     return () => clearInterval(interval);
   }, [load]);

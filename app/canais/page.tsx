@@ -3,40 +3,51 @@
 import { useState } from "react";
 import { PageShell, Kpi, LoadingState, ErrorState } from "@/components/PageShell";
 import { MonthFilter } from "@/components/MonthFilter";
+import { CycleFilter } from "@/components/CycleFilter";
+import { UnitFilter } from "@/components/UnitFilter";
 import { useDashboardData } from "@/components/useDashboardData";
 import { brand, textMuted } from "@/lib/theme";
 
 export default function CanaisPage() {
+  const [cycle, setCycle] = useState("all");
   const [month, setMonth] = useState("all");
-  const { data, error, loading, reload } = useDashboardData(month);
-  const maxLeads = data ? Math.max(...data.channels.map((c) => c.leads), 1) : 1;
-  const totalOnlineOutras = data
-    ? Math.max(1, data.onlineVsOutras.onlineLeads + data.onlineVsOutras.outrasLeads)
-    : 1;
+  const [unit, setUnit] = useState("all");
+  const { data, error, loading, reload } = useDashboardData(cycle, month);
+
+  const scoped = data ? (unit === "all" ? data : data.channelsByUnit[unit]) : null;
+  const channels = scoped?.channels ?? [];
+  const onlineVsOutras = scoped?.onlineVsOutras ?? { onlineLeads: 0, outrasLeads: 0 };
+
+  const maxLeads = Math.max(...channels.map((c) => c.leads), 1);
+  const totalOnlineOutras = Math.max(1, onlineVsOutras.onlineLeads + onlineVsOutras.outrasLeads);
 
   return (
-    <PageShell title="Canais de Origem" subtitle="Leads e matrículas por canal, ciclo Baixa 2026">
+    <PageShell title="Canais de Origem" subtitle="Leads e matrículas por canal">
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={reload} />}
       {data && (
         <>
-          <MonthFilter
-            availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
-            value={month}
-            onChange={setMonth}
-          />
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <CycleFilter value={cycle} onChange={setCycle} />
+            <MonthFilter
+              availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
+              value={month}
+              onChange={setMonth}
+            />
+            <UnitFilter value={unit} onChange={setUnit} />
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
             <Kpi
               label="Leads via Canais Online"
-              value={`${((data.onlineVsOutras.onlineLeads / totalOnlineOutras) * 100).toFixed(0)}%`}
-              hint={`${data.onlineVsOutras.onlineLeads.toLocaleString("pt-BR")} leads · Meta, Google, Tráfego Pago, Whatsapp Direto, Link na Bio, Ligação na Unidade`}
+              value={`${((onlineVsOutras.onlineLeads / totalOnlineOutras) * 100).toFixed(0)}%`}
+              hint={`${onlineVsOutras.onlineLeads.toLocaleString("pt-BR")} leads · Meta, Google, Tráfego Pago, Whatsapp Direto, Link na Bio, Ligação na Unidade`}
               color={brand.azulEscuro}
             />
             <Kpi
               label="Leads via Outras Ações"
-              value={`${((data.onlineVsOutras.outrasLeads / totalOnlineOutras) * 100).toFixed(0)}%`}
-              hint={`${data.onlineVsOutras.outrasLeads.toLocaleString("pt-BR")} leads · Indicação, MGM, Hubspot e demais`}
+              value={`${((onlineVsOutras.outrasLeads / totalOnlineOutras) * 100).toFixed(0)}%`}
+              hint={`${onlineVsOutras.outrasLeads.toLocaleString("pt-BR")} leads · Indicação, MGM, Hubspot e demais`}
             />
           </div>
 
@@ -54,7 +65,12 @@ export default function CanaisPage() {
             <div className="font-display" style={{ fontSize: 15, fontWeight: 700 }}>
               Leads e Matrículas por Canal
             </div>
-            {data.channels.map((c) => (
+            {channels.length === 0 && (
+              <div style={{ fontSize: 13, color: textMuted(0.55) }}>
+                Nenhum lead nesse recorte de ciclo/mês/unidade.
+              </div>
+            )}
+            {channels.map((c) => (
               <div key={c.canal} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                   <span style={{ fontWeight: 700 }}>

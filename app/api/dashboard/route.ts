@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  UNIT_SHEETS,
-  CYCLE_SHEETS,
-  fetchAllUnitsCurrentCycle,
-  fetchAllUnitsForCycle
-} from "@/lib/sheets";
+import { UNIT_SHEETS, CYCLE_SHEETS, fetchAllUnitsForCycle } from "@/lib/sheets";
 import {
   computeFunnelCounts,
   computeGargalo,
@@ -14,6 +9,7 @@ import {
   isCanalOnline
 } from "@/lib/businessRules";
 import { parseBrDate, monthKey, monthLabel } from "@/lib/dates";
+import type { RawLeadRow } from "@/lib/sheets";
 
 // Sempre dinâmica: lê a planilha a cada request, nunca pré-renderiza em build.
 export const dynamic = "force-dynamic";
@@ -27,8 +23,32 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const monthFilter = searchParams.get("month"); // "YYYY-MM" ou null/"all"
+    const cycleFilter = searchParams.get("cycle") ?? "all"; // "all" | "alta-25-26" | "baixa-2026" | ...
 
-    const allRows = await fetchAllUnitsCurrentCycle();
+    // Busca os 4 ciclos UMA vez só (em paralelo) e reaproveita esse
+    // resultado tanto pra comparação entre ciclos quanto pro escopo
+    // selecionado (Geral ou um ciclo específico) — antes isso buscava os
+    // mesmos dados duas vezes, o que deixava a página lenta e arriscava
+    // estourar o tempo limite da função na Vercel.
+    const rowsByCycle = await Promise.all(
+      CYCLE_SHEETS.map(async (c) => ({
+        id: c.id,
+        label: c.label,
+        rows: await fetchAllUnitsForCycle(c.sheetSuffix)
+      }))
+    );
+
+    const cycles = rowsByCycle.map((c) => {
+      const funnel = computeFunnelCounts(c.rows);
+      return { id: c.id, label: c.label, leads: c.rows.length, matriculas: funnel.Matrícula };
+    });
+
+    // allRows = todas as linhas do ciclo (ou dos 4 ciclos) selecionado, sem
+    // filtro de mês — usado pra montar a lista de meses disponíveis.
+    const allRows: RawLeadRow[] =
+      cycleFilter === "all"
+        ? rowsByCycle.flatMap((c) => c.rows)
+        : rowsByCycle.find((c) => c.id === cycleFilter)?.rows ?? rowsByCycle.flatMap((c) => c.rows);
 
     // Filtro de mês: aplica-se aos dados por unidade, ao agregado, à
     // temperatura e aos canais — mas não à lista de meses disponíveis
@@ -59,7 +79,7 @@ export async function GET(request: Request) {
       };
     });
 
-    // ---------- Agregado (todas as unidades, ciclo atual) ----------
+    // ---------- Agregado (unidades somadas, no escopo de ciclo/mês selecionado) ----------
     const validosGeral = currentRows.filter((r) => !isForaDoPerfil(r));
     const foraPerfilGeral = currentRows.length - validosGeral.length;
     const matriculasGeral = currentRows.filter(isMatricula).length;
@@ -100,23 +120,33 @@ export async function GET(request: Request) {
       }
     }
 
-    // ---------- Canais ----------
-    const channelMap = new Map<string, { leads: number; matriculas: number; online: boolean }>();
-    for (const row of currentRows) {
-      const canal = classificarCanal(row.origem);
-      const entry = channelMap.get(canal) ?? { leads: 0, matriculas: 0, online: isCanalOnline(canal) };
-      entry.leads += 1;
-      if (isMatricula(row)) entry.matriculas += 1;
-      channelMap.set(canal, entry);
+    // ---------- Canais (geral + por unidade, pro filtro de unidade na tela) ----------
+    function buildChannels(rows: RawLeadRow[]) {
+      const map = new Map<string, { leads: number; matriculas: number; online: boolean }>();
+      for (const row of rows) {
+        const canal = classificarCanal(row.origem);
+        const entry = map.get(canal) ?? { leads: 0, matriculas: 0, online: isCanalOnline(canal) };
+        entry.leads += 1;
+        if (isMatricula(row)) entry.matriculas += 1;
+        map.set(canal, entry);
+      }
+      const list = Array.from(map.entries())
+        .map(([canal, v]) => ({ canal, ...v }))
+        .sort((a, b) => b.leads - a.leads);
+      const onlineLeads = list.filter((c) => c.online).reduce((s, c) => s + c.leads, 0);
+      const outrasLeads = list.filter((c) => !c.online).reduce((s, c) => s + c.leads, 0);
+      return { channels: list, onlineVsOutras: { onlineLeads, outrasLeads } };
     }
-    const channels = Array.from(channelMap.entries())
-      .map(([canal, v]) => ({ canal, ...v }))
-      .sort((a, b) => b.leads - a.leads);
 
-    const onlineLeads = channels.filter((c) => c.online).reduce((s, c) => s + c.leads, 0);
-    const outrasLeads = channels.filter((c) => !c.online).reduce((s, c) => s + c.leads, 0);
+    const channelsGeral = buildChannels(currentRows);
+    const channelsByUnit: Record<string, ReturnType<typeof buildChannels>> = {
+      am: buildChannels(currentRows.filter((r) => r.unidadeId === "am")),
+      li: buildChannels(currentRows.filter((r) => r.unidadeId === "li")),
+      pi: buildChannels(currentRows.filter((r) => r.unidadeId === "pi")),
+      ta: buildChannels(currentRows.filter((r) => r.unidadeId === "ta"))
+    };
 
-    // ---------- Evolução mensal ----------
+    // ---------- Evolução mensal (lista de meses disponíveis no escopo selecionado) ----------
     type MonthBucket = { leads: number; matriculas: number };
     const monthly = new Map<string, MonthBucket>();
 
@@ -144,31 +174,15 @@ export async function GET(request: Request) {
         };
       });
 
-    // ---------- Ciclos (Alta 25-26, Alta 26-27, Baixa 2026, Baixa 2027) ----------
-    // Usa sempre o total completo de cada ciclo (allRows), nunca os dados já
-    // filtrados por mês — senão a barra de "Baixa 2026" ficaria menor que as
-    // outras só porque um mês específico está selecionado no filtro.
-    const cycles = await Promise.all(
-      CYCLE_SHEETS.map(async (c) => {
-        const rows = c.id === "baixa-2026" ? allRows : await fetchAllUnitsForCycle(c.sheetSuffix);
-        const funnel = computeFunnelCounts(rows);
-        return {
-          id: c.id,
-          label: c.label,
-          leads: rows.length,
-          matriculas: funnel.Matrícula
-        };
-      })
-    );
-
     return NextResponse.json({
       updatedAt: new Date().toISOString(),
       units,
       aggregate,
       temperature,
       temperatureByUnit,
-      channels,
-      onlineVsOutras: { onlineLeads, outrasLeads },
+      channels: channelsGeral.channels,
+      onlineVsOutras: channelsGeral.onlineVsOutras,
+      channelsByUnit,
       monthlyEvolution,
       cycles
     });

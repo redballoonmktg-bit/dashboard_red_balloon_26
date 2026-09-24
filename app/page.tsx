@@ -12,27 +12,44 @@ import {
 } from "recharts";
 import { PageShell, Kpi, LoadingState, ErrorState } from "@/components/PageShell";
 import { MonthFilter } from "@/components/MonthFilter";
+import { CycleFilter } from "@/components/CycleFilter";
 import { useDashboardData } from "@/components/useDashboardData";
 import { unitColor, unitLabel, textMuted } from "@/lib/theme";
 
+const CYCLE_LABELS: Record<string, string> = {
+  all: "todos os ciclos",
+  "alta-25-26": "Alta 25-26",
+  "baixa-2026": "Baixa 2026",
+  "alta-26-27": "Alta 26-27",
+  "baixa-2027": "Baixa 2027"
+};
+
 export default function VisaoGeralPage() {
+  const [cycle, setCycle] = useState("all");
   const [month, setMonth] = useState("all");
-  const { data, error, loading, reload } = useDashboardData(month);
+  const { data, error, loading, reload } = useDashboardData(cycle, month);
 
   return (
-    <PageShell title="Visão Geral" subtitle="Leads 4 Escolas · Ciclo Baixa 2026">
+    <PageShell title="Visão Geral" subtitle="Leads 4 Escolas">
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={reload} />}
       {data && (
         <>
-          <MonthFilter
-            availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
-            value={month}
-            onChange={setMonth}
-          />
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            <CycleFilter value={cycle} onChange={setCycle} />
+            <MonthFilter
+              availableMonths={data.monthlyEvolution.map((m) => ({ key: m.key, label: m.label }))}
+              value={month}
+              onChange={setMonth}
+            />
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
-            <Kpi label="Total de Leads" value={data.aggregate.totalLeads.toLocaleString("pt-BR")} hint="Todos os ciclos somados" />
+            <Kpi
+              label="Total de Leads"
+              value={data.aggregate.totalLeads.toLocaleString("pt-BR")}
+              hint={cycle === "all" ? "Todos os ciclos somados" : CYCLE_LABELS[cycle]}
+            />
             <Kpi
               label="Matrículas"
               value={data.aggregate.matriculas.toLocaleString("pt-BR")}
