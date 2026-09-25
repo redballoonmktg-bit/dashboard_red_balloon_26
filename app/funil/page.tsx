@@ -35,7 +35,8 @@ export default function FunilPorUnidadePage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
             {data.units.map((u) => {
               const isWorst = u.id === worstUnitId;
-              const stage0 = u.funnel[FUNNEL_STAGES[0]] || 1;
+              const primeiroContato = u.funnel[FUNNEL_STAGES[0]] || 0;
+              const stage0 = primeiroContato || 1; // evita divisão por zero só no cálculo da barra
               return (
                 <div
                   key={u.id}
@@ -49,12 +50,19 @@ export default function FunilPorUnidadePage() {
                     gap: 12
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 800 }}>
                       <span style={{ width: 9, height: 9, borderRadius: 999, background: unitColor[u.id] }} />
                       {unitLabel[u.id]}
                     </div>
-                    <span style={{ fontSize: 11, color: textMuted(0.55) }}>{u.totalLeads} leads</span>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 11, color: textMuted(0.55) }}>{primeiroContato} no funil</div>
+                      {u.totalLeads - primeiroContato > 0 && (
+                        <div style={{ fontSize: 10, color: textMuted(0.4) }}>
+                          + {u.totalLeads - primeiroContato} fora do perfil
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>

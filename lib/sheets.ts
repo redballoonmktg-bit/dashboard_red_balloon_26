@@ -223,11 +223,26 @@ const UNIT_PREFIX: Record<string, "AM" | "LI" | "PI" | "TA"> = {
 };
 
 /**
+ * Reconhece especificamente o erro "essa aba não existe na planilha"
+ * (o que a API do Sheets devolve como "Unable to parse range: ...").
+ * Só esse tipo de erro deve ser tratado como "ciclo vazio pra essa
+ * unidade" — qualquer outro erro (ID da planilha errado, sem permissão,
+ * credenciais inválidas) precisa subir e aparecer pro usuário, não virar
+ * silenciosamente "zero leads em tudo".
+ */
+function isMissingSheetError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("Unable to parse range") || msg.includes("Invalid requests");
+}
+
+/**
  * Busca as 4 unidades para um ciclo arbitrário (ex.: "Alta 25-26"), em UMA
  * requisição batelada. Se a aba de alguma unidade não existir para aquele
  * ciclo (o batchGet inteiro falha nesse caso), cai para leituras
- * individuais — mais lento, mas resiliente: a unidade sem aba entra com 0
- * leads em vez de derrubar a página inteira.
+ * individuais — mais lento, mas resiliente: só a unidade sem aba entra com
+ * 0 leads; qualquer outro tipo de erro (ID errado, sem permissão) sobe
+ * normalmente e aparece como erro na tela, em vez de ficar tudo zerado
+ * silenciosamente.
  */
 export async function fetchAllUnitsForCycle(cycleSuffix: string): Promise<RawLeadRow[]> {
   const entries = UNIT_SHEETS.map((u) => ({
@@ -237,9 +252,16 @@ export async function fetchAllUnitsForCycle(cycleSuffix: string): Promise<RawLea
 
   try {
     return await batchFetchUnits(entries);
-  } catch {
+  } catch (batchErr) {
+    if (!isMissingSheetError(batchErr)) throw batchErr;
+
     const results = await Promise.all(
-      entries.map((e) => fetchUnitSheet(e.sheetName, e.unitId).catch(() => [] as RawLeadRow[]))
+      entries.map((e) =>
+        fetchUnitSheet(e.sheetName, e.unitId).catch((err) => {
+          if (isMissingSheetError(err)) return [] as RawLeadRow[];
+          throw err;
+        })
+      )
     );
     return results.flat();
   }
