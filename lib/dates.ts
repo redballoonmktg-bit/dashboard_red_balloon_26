@@ -17,23 +17,23 @@ export const MONTH_LABELS_PT = [
  * Interpreta uma data vinda do Google Sheets (dateTimeRenderOption
  * FORMATTED_STRING).
  *
- * IMPORTANTE: a planilha real usa formato mês/dia/ano (ex.: "9/21/2026" =
- * 21 de setembro), não dia/mês/ano — confirmado direto na tela do Sheets.
- * Também aceitamos "aaaa-mm-dd" como fallback, sem essa ambiguidade.
+ * A coluna "Data do Lead" da planilha agora está formatada explicitamente
+ * como DD/MM/AAAA (formato brasileiro) — ex.: "21/09/2026" = 21 de
+ * setembro. Também aceitamos "aaaa-mm-dd" como fallback, sem ambiguidade.
  *
- * Datas fora de um intervalo plausível (2020–2035), ou com mês/dia fora do
+ * Datas fora de um intervalo plausível (2020–2035), ou com dia/mês fora do
  * intervalo válido, são tratadas como inválidas — evita que um erro de
- * digitação na planilha vire um "mês fantasma" no filtro de Evolução Mensal.
+ * digitação na planilha vire um "mês fantasma" no filtro por mês.
  */
 export function parseBrDate(value: string): Date | null {
   const v = value.trim();
   if (!v) return null;
 
-  const us = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-  if (us) {
-    const [, mo, d, y] = us;
-    const month = Number(mo);
+  const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (br) {
+    const [, d, mo, y] = br;
     const day = Number(d);
+    const month = Number(mo);
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     const year = y.length === 2 ? Number(`20${y}`) : Number(y);
     const date = new Date(year, month - 1, day);
